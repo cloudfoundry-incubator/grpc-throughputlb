@@ -3,7 +3,6 @@ package throughputlb
 import (
 	"errors"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -21,23 +20,67 @@ const (
 type address struct {
 	grpc.Address
 
+	mu             sync.RWMutex
 	state          addrState
 	activeRequests int64
 	maxRequests    int64
 }
 
 func (a *address) claim() error {
-	if atomic.AddInt64(&a.activeRequests, 1) > a.maxRequests {
-		a.release()
+	a.mu.Lock()
+	defer a.mu.Unlock()
 
+	if a.activeRequests >= a.maxRequests {
 		return errors.New("max requests exceeded")
 	}
+
+	a.activeRequests += 1
 
 	return nil
 }
 
 func (a *address) release() {
-	atomic.AddInt64(&a.activeRequests, -1)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.activeRequests -= 1
+}
+
+func (a *address) goUp() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.state = stateUp
+}
+
+func (a *address) goDown(_ error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	// TODO: Handle error
+
+	a.state = stateDown
+}
+
+func (a *address) isUp() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	return a.state == stateUp
+}
+
+func (a *address) isDown() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	return a.state == stateDown
+}
+
+func (a *address) hasCapacity() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	return a.activeRequests < a.maxRequests
 }
 
 type ThroughputLoadBalancer struct {
@@ -57,8 +100,6 @@ func NewThroughputLoadBalancer(maxRequests int64) *ThroughputLoadBalancer {
 }
 
 func (lb *ThroughputLoadBalancer) Start(target string, cfg grpc.BalancerConfig) error {
-	// TODO: Resolve DNS
-
 	lb.target = target
 	lb.addAddr()
 
@@ -73,11 +114,9 @@ func (lb *ThroughputLoadBalancer) Up(addr grpc.Address) func(error) {
 	downFunc := func(error) {}
 	for _, a := range addrs {
 		if a.Address == addr {
-			atomic.StoreInt64((*int64)(&a.state), (int64)(stateUp))
+			a.goUp()
 
-			downFunc = func(error) {
-				atomic.StoreInt64((*int64)(&a.state), (int64)(stateDown))
-			}
+			downFunc = a.goDown
 		}
 	}
 
@@ -123,20 +162,18 @@ func (lb *ThroughputLoadBalancer) next(wait bool) (*address, error) {
 		lb.mu.RUnlock()
 
 		for _, a := range addrs {
-			if (addrState)(atomic.LoadInt64((*int64)(&a.state))) == stateDown {
+			if a.isDown() {
 				needNewAddr = false
 				continue
 			}
 
-			if (addrState)(atomic.LoadInt64((*int64)(&a.state))) == stateUp {
-				if atomic.LoadInt64(&a.activeRequests) < lb.maxRequests {
-					err := a.claim()
-					if err != nil {
-						continue
-					}
-
-					return a, nil
+			if a.isUp() && a.hasCapacity() {
+				err := a.claim()
+				if err != nil {
+					continue
 				}
+
+				return a, nil
 			}
 		}
 
