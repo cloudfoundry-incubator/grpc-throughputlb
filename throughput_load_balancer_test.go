@@ -1,7 +1,7 @@
 package throughputlb_test
 
 import (
-	"github.com/bradylove/throughputlb"
+	throughputlb "code.cloudfoundry.org/grpc-throughputlb"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
