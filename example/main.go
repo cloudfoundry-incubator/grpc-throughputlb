@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	lb := throughputlb.NewThroughputLoadBalancer(20)
+	lb := throughputlb.NewThroughputLoadBalancer(100, 20)
 
 	conn, err := grpc.Dial(os.Getenv("GRPC_ADDR"),
 		grpc.WithBalancer(lb))
