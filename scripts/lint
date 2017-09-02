@@ -1,0 +1,34 @@
+#!/bin/bash
+
+function run_linters {
+    echo "Installing linters"
+    go get -u github.com/alecthomas/gometalinter
+    gometalinter --install
+
+    echo "Running Linters"
+
+    local dir
+    if [ "$1" = "" ]; then
+        pkg="./..."
+    else
+        pkg="$1"
+    fi
+
+    gometalinter --vendor \
+      --disable-all $pkg \
+      --skip rpc \
+      --enable "vet" \
+      --enable "deadcode" \
+      --enable "golint" \
+      --enable "aligncheck" \
+      --enable "structcheck" \
+      --enable "varcheck" \
+      --enable "errcheck" \
+      --enable "ineffassign" \
+      --enable "interfacer" \
+      --enable "megacheck"
+
+    return 0
+}
+
+run_linters $@

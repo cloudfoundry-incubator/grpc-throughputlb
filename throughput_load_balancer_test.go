@@ -40,7 +40,7 @@ var _ = Describe("ThroughputLoadBalancer", func() {
 
 		done := make(chan struct{})
 		go func() {
-			lb.Get(context.Background(), grpc.BalancerGetOptions{BlockingWait: true})
+			_, _, _ = lb.Get(context.Background(), grpc.BalancerGetOptions{BlockingWait: true})
 			close(done)
 		}()
 

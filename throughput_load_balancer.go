@@ -34,7 +34,7 @@ func (a *address) claim() error {
 		return errors.New("max requests exceeded")
 	}
 
-	a.activeRequests += 1
+	a.activeRequests++
 
 	return nil
 }
@@ -43,7 +43,7 @@ func (a *address) release() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	a.activeRequests -= 1
+	a.activeRequests--
 }
 
 func (a *address) goUp() {
@@ -141,6 +141,8 @@ func (lb *ThroughputLoadBalancer) Notify() <-chan []grpc.Address {
 }
 
 func (*ThroughputLoadBalancer) Close() error {
+	// TODO: Should this remove all addresses and notify or stop opperation?
+
 	return nil
 }
 
