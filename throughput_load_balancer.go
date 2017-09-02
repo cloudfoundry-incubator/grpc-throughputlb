@@ -90,18 +90,22 @@ type ThroughputLoadBalancer struct {
 	target      string
 	notify      chan []grpc.Address
 	maxRequests int64
+	maxAddrs    int64
 }
 
-func NewThroughputLoadBalancer(maxRequests int64) *ThroughputLoadBalancer {
+func NewThroughputLoadBalancer(maxRequests int64, maxAddrs int64) *ThroughputLoadBalancer {
 	return &ThroughputLoadBalancer{
 		notify:      make(chan []grpc.Address, 1),
 		maxRequests: maxRequests,
+		maxAddrs:    maxAddrs,
 	}
 }
 
 func (lb *ThroughputLoadBalancer) Start(target string, cfg grpc.BalancerConfig) error {
 	lb.target = target
 	lb.addAddr()
+
+	// TODO: Start monitor to cleanup addrs
 
 	return nil
 }
@@ -185,19 +189,21 @@ func (lb *ThroughputLoadBalancer) next(wait bool) (*address, error) {
 			return nil, grpc.Errorf(codes.Unavailable, "there is no address available")
 		}
 
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
 func (lb *ThroughputLoadBalancer) addAddr() {
 	lb.mu.Lock()
-	lb.addrs = append(lb.addrs, &address{
-		Address: grpc.Address{
-			Addr:     lb.target,
-			Metadata: len(lb.addrs),
-		},
-		maxRequests: lb.maxRequests,
-	})
+	if int64(len(lb.addrs)) < lb.maxAddrs {
+		lb.addrs = append(lb.addrs, &address{
+			Address: grpc.Address{
+				Addr:     lb.target,
+				Metadata: len(lb.addrs),
+			},
+			maxRequests: lb.maxRequests,
+		})
+	}
 	lb.mu.Unlock()
 
 	lb.sendNotify()
