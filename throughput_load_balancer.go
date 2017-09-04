@@ -96,6 +96,7 @@ type ThroughputLoadBalancer struct {
 func NewThroughputLoadBalancer(maxRequests int64, maxAddrs int64) *ThroughputLoadBalancer {
 	return &ThroughputLoadBalancer{
 		notify:      make(chan []grpc.Address, 1),
+		addrs:       make([]*address, 0, maxAddrs),
 		maxRequests: maxRequests,
 		maxAddrs:    maxAddrs,
 	}
@@ -115,7 +116,7 @@ func (lb *ThroughputLoadBalancer) Up(addr grpc.Address) func(error) {
 	addrs := lb.addrs
 	lb.mu.RUnlock()
 
-	downFunc := func(error) {}
+	var downFunc func(error)
 	for _, a := range addrs {
 		if a.Address == addr {
 			a.goUp()
@@ -141,7 +142,7 @@ func (lb *ThroughputLoadBalancer) Notify() <-chan []grpc.Address {
 }
 
 func (*ThroughputLoadBalancer) Close() error {
-	// TODO: Should this remove all addresses and notify or stop opperation?
+	// TODO: Should this remove all addresses and notify or just stop opperation?
 
 	return nil
 }
