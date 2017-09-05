@@ -103,9 +103,13 @@ func NewThroughputLoadBalancer(maxRequests int64, maxAddrs int64) *ThroughputLoa
 }
 
 func (lb *ThroughputLoadBalancer) Start(target string, cfg grpc.BalancerConfig) error {
+	lb.mu.Lock()
 	lb.target = target
+	lb.mu.Unlock()
+
 	lb.addAddr()
 
+	// TODO: Validate target and return error if invalid
 	// TODO: Start monitor to cleanup addrs
 
 	return nil
@@ -116,16 +120,15 @@ func (lb *ThroughputLoadBalancer) Up(addr grpc.Address) func(error) {
 	addrs := lb.addrs
 	lb.mu.RUnlock()
 
-	var downFunc func(error)
 	for _, a := range addrs {
 		if a.Address == addr {
 			a.goUp()
 
-			downFunc = a.goDown
+			return a.goDown
 		}
 	}
 
-	return downFunc
+	return func(_ error) {}
 }
 
 func (lb *ThroughputLoadBalancer) Get(ctx context.Context, opts grpc.BalancerGetOptions) (grpc.Address, func(), error) {
