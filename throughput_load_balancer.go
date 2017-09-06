@@ -10,6 +10,11 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
+var (
+	errUnavailable         = grpc.Errorf(codes.Unavailable, "there is no address available")
+	errMaxRequestsExceeded = errors.New("max requests exceeded")
+)
+
 type addrState int64
 
 const (
@@ -31,7 +36,7 @@ func (a *address) claim() error {
 	defer a.mu.Unlock()
 
 	if a.activeRequests >= a.maxRequests {
-		return errors.New("max requests exceeded")
+		return errMaxRequestsExceeded
 	}
 
 	a.activeRequests++
@@ -192,7 +197,7 @@ func (lb *ThroughputLoadBalancer) next(wait bool) (*address, error) {
 		}
 
 		if !wait {
-			return nil, grpc.Errorf(codes.Unavailable, "there is no address available")
+			return nil, errUnavailable
 		}
 
 		time.Sleep(50 * time.Millisecond)
