@@ -27,8 +27,8 @@ type address struct {
 
 	mu             sync.RWMutex
 	state          addrState
-	activeRequests int64
-	maxRequests    int64
+	activeRequests int
+	maxRequests    int
 }
 
 func (a *address) claim() error {
@@ -81,18 +81,11 @@ func (a *address) isDown() bool {
 	return a.state == stateDown
 }
 
-func (a *address) hasCapacity() bool {
+func (a *address) capacity() int {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	return a.activeRequests < a.maxRequests
-}
-
-func (a *address) isUnused() bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	return a.activeRequests == 0
+	return a.activeRequests
 }
 
 type ThroughputLoadBalancerOption func(*ThroughputLoadBalancer)
@@ -109,21 +102,21 @@ type ThroughputLoadBalancer struct {
 
 	target          string
 	notify          chan []grpc.Address
-	maxRequests     int64
-	maxAddrs        int64
+	maxRequests     int
+	numAddrs        int
 	cleanupInterval time.Duration
 }
 
 func NewThroughputLoadBalancer(
-	maxRequests int64,
-	maxAddrs int64,
+	maxRequests int,
+	numAddrs int,
 	opts ...ThroughputLoadBalancerOption,
 ) *ThroughputLoadBalancer {
 	lb := &ThroughputLoadBalancer{
-		notify:          make(chan []grpc.Address, 1),
-		addrs:           make([]*address, 0, maxAddrs),
+		notify:          make(chan []grpc.Address, numAddrs),
+		addrs:           make([]*address, numAddrs, numAddrs),
 		maxRequests:     maxRequests,
-		maxAddrs:        maxAddrs,
+		numAddrs:        numAddrs,
 		cleanupInterval: time.Minute,
 	}
 
@@ -131,20 +124,26 @@ func NewThroughputLoadBalancer(
 		o(lb)
 	}
 
-	go lb.cleanupLoop()
-
 	return lb
 }
 
 func (lb *ThroughputLoadBalancer) Start(target string, cfg grpc.BalancerConfig) error {
+	// TODO: Validate target and return error if invalid
+
 	lb.mu.Lock()
 	lb.target = target
+	for i := 0; i < lb.numAddrs; i++ {
+		lb.addrs[i] = &address{
+			Address: grpc.Address{
+				Addr:     lb.target,
+				Metadata: i,
+			},
+			maxRequests: lb.maxRequests,
+		}
+	}
 	lb.mu.Unlock()
 
-	lb.addAddr()
-
-	// TODO: Validate target and return error if invalid
-	// TODO: Start monitor to cleanup addrs
+	lb.sendNotify()
 
 	return nil
 }
@@ -189,9 +188,9 @@ func (lb *ThroughputLoadBalancer) sendNotify() {
 	addrs := lb.addrs
 	lb.mu.RUnlock()
 
-	var grpcAddrs []grpc.Address
-	for _, a := range addrs {
-		grpcAddrs = append(grpcAddrs, a.Address)
+	grpcAddrs := make([]grpc.Address, len(addrs))
+	for i, a := range addrs {
+		grpcAddrs[i] = a.Address
 	}
 
 	lb.notify <- grpcAddrs
@@ -199,30 +198,25 @@ func (lb *ThroughputLoadBalancer) sendNotify() {
 
 func (lb *ThroughputLoadBalancer) next(wait bool) (*address, error) {
 	for {
-		needNewAddr := true
+		var addr *address
+		lowestCapacity := lb.maxRequests * 2
 
 		lb.mu.RLock()
-		addrs := lb.addrs
-		lb.mu.RUnlock()
-
-		for _, a := range addrs {
+		for _, a := range lb.addrs {
 			if a.isDown() {
-				needNewAddr = false
 				continue
 			}
 
-			if a.isUp() && a.hasCapacity() {
-				err := a.claim()
-				if err != nil {
-					continue
-				}
-
-				return a, nil
+			if a.capacity() < lowestCapacity {
+				addr = a
+				lowestCapacity = a.capacity()
 			}
 		}
+		lb.mu.RUnlock()
 
-		if needNewAddr {
-			lb.addAddr()
+		if addr != nil {
+			addr.claim()
+			return addr, nil
 		}
 
 		if !wait {
@@ -230,48 +224,5 @@ func (lb *ThroughputLoadBalancer) next(wait bool) (*address, error) {
 		}
 
 		time.Sleep(50 * time.Millisecond)
-	}
-}
-
-func (lb *ThroughputLoadBalancer) addAddr() {
-	lb.mu.Lock()
-	if int64(len(lb.addrs)) < lb.maxAddrs {
-		lb.addrs = append(lb.addrs, &address{
-			Address: grpc.Address{
-				Addr:     lb.target,
-				Metadata: len(lb.addrs),
-			},
-			maxRequests: lb.maxRequests,
-		})
-	}
-	lb.mu.Unlock()
-
-	lb.sendNotify()
-}
-
-func (lb *ThroughputLoadBalancer) cleanupLoop() {
-	ticker := time.NewTicker(lb.cleanupInterval)
-
-	for range ticker.C {
-		lb.cleanupAddrs()
-	}
-}
-
-func (lb *ThroughputLoadBalancer) cleanupAddrs() {
-	// TODO: The locking in this method feels like it would be a race
-	// condition should this whole method block?
-
-	lb.mu.RLock()
-	addrs := lb.addrs
-	lb.mu.RUnlock()
-
-	if len(addrs) > 1 {
-		if addrs[len(addrs)-1].isUnused() && addrs[len(addrs)-2].isUnused() {
-			lb.mu.Lock()
-			lb.addrs = lb.addrs[:len(addrs)-1]
-			lb.mu.Unlock()
-
-			lb.sendNotify()
-		}
 	}
 }
