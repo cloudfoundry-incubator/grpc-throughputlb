@@ -113,7 +113,7 @@ func NewThroughputLoadBalancer(
 ) *ThroughputLoadBalancer {
 	lb := &ThroughputLoadBalancer{
 		notify:          make(chan []grpc.Address, numAddrs),
-		addrs:           make([]*address, numAddrs, numAddrs),
+		addrs:           make([]*address, numAddrs),
 		maxRequests:     maxRequests,
 		numAddrs:        numAddrs,
 		cleanupInterval: time.Minute,
@@ -202,8 +202,10 @@ func (lb *ThroughputLoadBalancer) next(wait bool) (*address, error) {
 		lb.mu.RUnlock()
 
 		if addr != nil {
-			addr.claim()
-			return addr, nil
+			err := addr.claim()
+			if err == nil {
+				return addr, nil
+			}
 		}
 
 		if !wait {
