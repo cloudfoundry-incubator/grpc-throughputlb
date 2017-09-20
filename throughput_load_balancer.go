@@ -188,7 +188,6 @@ func (lb *ThroughputLoadBalancer) next(wait bool) (*address, error) {
 		var addr *address
 		lowestCapacity := lb.maxRequests * 2
 
-		lb.mu.RLock()
 		for _, a := range lb.addrs {
 			if a.isDown() || a.atCapacity() {
 				continue
@@ -199,7 +198,6 @@ func (lb *ThroughputLoadBalancer) next(wait bool) (*address, error) {
 				lowestCapacity = a.capacity()
 			}
 		}
-		lb.mu.RUnlock()
 
 		if addr != nil {
 			err := addr.claim()
