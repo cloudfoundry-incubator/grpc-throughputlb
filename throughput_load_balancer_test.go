@@ -96,6 +96,57 @@ var _ = Describe("ThroughputLoadBalancer", func() {
 		}
 	})
 
+	It("chooses the least used address", func() {
+		lb := throughputlb.NewThroughputLoadBalancer(maxRequests, numAddrs)
+		err := lb.Start("127.0.0.1:3000", grpc.BalancerConfig{})
+		Expect(err).ToNot(HaveOccurred())
+
+		var addrs []grpc.Address
+		Expect(lb.Notify()).To(Receive(&addrs))
+
+		for _, a := range addrs {
+			lb.Up(a)
+		}
+
+		putters := make([][]func(), numAddrs)
+
+		By("maxing out active requests")
+		for i := 0; i < numAddrs; i++ {
+			for x := 0; x < maxRequests; x++ {
+				a, putter, err := lb.Get(context.Background(), grpc.BalancerGetOptions{})
+				Expect(err).ToNot(HaveOccurred())
+
+				putters[a.Metadata.(int)] = append(putters[a.Metadata.(int)], putter)
+			}
+		}
+
+		By("releasing all #1 and #3 addrs")
+		for _, p := range putters[1] {
+			p()
+		}
+
+		for _, p := range putters[3] {
+			p()
+		}
+
+		By("getting more addrs")
+		addr, _, err := lb.Get(context.Background(), grpc.BalancerGetOptions{})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(addr).To(Equal(addrs[1]))
+
+		addr, _, err = lb.Get(context.Background(), grpc.BalancerGetOptions{})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(addr).To(Equal(addrs[3]))
+
+		addr, _, err = lb.Get(context.Background(), grpc.BalancerGetOptions{})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(addr).To(Equal(addrs[1]))
+
+		addr, _, err = lb.Get(context.Background(), grpc.BalancerGetOptions{})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(addr).To(Equal(addrs[3]))
+	})
+
 	It("is goroutine safe", func() {
 		lb := throughputlb.NewThroughputLoadBalancer(maxRequests, numAddrs)
 		err := lb.Start("127.0.0.1:3000", grpc.BalancerConfig{})

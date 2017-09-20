@@ -88,6 +88,13 @@ func (a *address) capacity() int {
 	return a.activeRequests
 }
 
+func (a *address) atCapacity() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	return a.activeRequests >= a.maxRequests
+}
+
 type ThroughputLoadBalancerOption func(*ThroughputLoadBalancer)
 
 func WithCleanupInterval(d time.Duration) ThroughputLoadBalancerOption {
@@ -203,7 +210,7 @@ func (lb *ThroughputLoadBalancer) next(wait bool) (*address, error) {
 
 		lb.mu.RLock()
 		for _, a := range lb.addrs {
-			if a.isDown() {
+			if a.isDown() || a.atCapacity() {
 				continue
 			}
 
