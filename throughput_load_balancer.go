@@ -67,13 +67,6 @@ func (a *address) goDown(_ error) {
 	a.state = stateDown
 }
 
-func (a *address) isUp() bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	return a.state == stateUp
-}
-
 func (a *address) isDown() bool {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -104,7 +97,6 @@ func WithCleanupInterval(d time.Duration) ThroughputLoadBalancerOption {
 }
 
 type ThroughputLoadBalancer struct {
-	mu    sync.RWMutex
 	addrs []*address
 
 	target          string
@@ -135,9 +127,6 @@ func NewThroughputLoadBalancer(
 }
 
 func (lb *ThroughputLoadBalancer) Start(target string, cfg grpc.BalancerConfig) error {
-	// TODO: Validate target and return error if invalid
-
-	lb.mu.Lock()
 	lb.target = target
 	for i := 0; i < lb.numAddrs; i++ {
 		lb.addrs[i] = &address{
@@ -148,7 +137,6 @@ func (lb *ThroughputLoadBalancer) Start(target string, cfg grpc.BalancerConfig) 
 			maxRequests: lb.maxRequests,
 		}
 	}
-	lb.mu.Unlock()
 
 	lb.sendNotify()
 
@@ -156,9 +144,7 @@ func (lb *ThroughputLoadBalancer) Start(target string, cfg grpc.BalancerConfig) 
 }
 
 func (lb *ThroughputLoadBalancer) Up(addr grpc.Address) func(error) {
-	lb.mu.RLock()
 	addrs := lb.addrs
-	lb.mu.RUnlock()
 
 	for _, a := range addrs {
 		if a.Address == addr {
@@ -185,18 +171,12 @@ func (lb *ThroughputLoadBalancer) Notify() <-chan []grpc.Address {
 }
 
 func (*ThroughputLoadBalancer) Close() error {
-	// TODO: Should this remove all addresses and notify or just stop opperation?
-
 	return nil
 }
 
 func (lb *ThroughputLoadBalancer) sendNotify() {
-	lb.mu.RLock()
-	addrs := lb.addrs
-	lb.mu.RUnlock()
-
-	grpcAddrs := make([]grpc.Address, len(addrs))
-	for i, a := range addrs {
+	grpcAddrs := make([]grpc.Address, len(lb.addrs))
+	for i, a := range lb.addrs {
 		grpcAddrs[i] = a.Address
 	}
 
