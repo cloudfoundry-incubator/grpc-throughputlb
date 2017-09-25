@@ -88,39 +88,24 @@ func (a *address) atCapacity() bool {
 	return a.activeRequests >= a.maxRequests
 }
 
-type ThroughputLoadBalancerOption func(*ThroughputLoadBalancer)
-
-func WithCleanupInterval(d time.Duration) ThroughputLoadBalancerOption {
-	return func(lb *ThroughputLoadBalancer) {
-		lb.cleanupInterval = d
-	}
-}
-
 type ThroughputLoadBalancer struct {
 	addrs []*address
 
-	target          string
-	notify          chan []grpc.Address
-	maxRequests     int
-	numAddrs        int
-	cleanupInterval time.Duration
+	target      string
+	notify      chan []grpc.Address
+	maxRequests int
+	numAddrs    int
 }
 
 func NewThroughputLoadBalancer(
 	maxRequests int,
 	numAddrs int,
-	opts ...ThroughputLoadBalancerOption,
 ) *ThroughputLoadBalancer {
 	lb := &ThroughputLoadBalancer{
-		notify:          make(chan []grpc.Address, numAddrs),
-		addrs:           make([]*address, numAddrs),
-		maxRequests:     maxRequests,
-		numAddrs:        numAddrs,
-		cleanupInterval: time.Minute,
-	}
-
-	for _, o := range opts {
-		o(lb)
+		notify:      make(chan []grpc.Address, numAddrs),
+		addrs:       make([]*address, numAddrs),
+		maxRequests: maxRequests,
+		numAddrs:    numAddrs,
 	}
 
 	return lb
