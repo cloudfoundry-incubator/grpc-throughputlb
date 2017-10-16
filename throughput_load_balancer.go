@@ -128,7 +128,10 @@ func (lb *ThroughputLoadBalancer) Start(target string, cfg grpc.BalancerConfig) 
 }
 
 // Up is called by gRPC when a connection has been established for the given
-// address.
+// address. Internally in the load balancer we will mark the address as up and
+// it can now be used by calling Get. The function returned by this method
+// will be called by gRPC when the address goes down and the address is no
+// longer usable.
 func (lb *ThroughputLoadBalancer) Up(addr grpc.Address) func(error) {
 	lb.mu.RLock()
 	addrs := lb.addrs
