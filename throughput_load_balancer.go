@@ -22,51 +22,6 @@ const (
 	stateUp
 )
 
-type address struct {
-	grpc.Address
-
-	state          addrState
-	activeRequests int
-	maxRequests    int
-}
-
-func (a *address) claim() error {
-	if a.activeRequests >= a.maxRequests {
-		return errMaxRequestsExceeded
-	}
-
-	a.activeRequests++
-
-	return nil
-}
-
-func (a *address) release() {
-	a.activeRequests--
-}
-
-func (a *address) goUp() {
-	a.state = stateUp
-}
-
-// TODO: As per the grpc-go documentation, it is not clear how to construct
-// and take advantage of the meaningful error parameter for down. Need
-// realistic demands to guide.
-func (a *address) goDown(_ error) {
-	a.state = stateDown
-}
-
-func (a *address) isDown() bool {
-	return a.state == stateDown
-}
-
-func (a *address) capacity() int {
-	return a.activeRequests
-}
-
-func (a *address) atCapacity() bool {
-	return a.activeRequests >= a.maxRequests
-}
-
 // ThroughputLoadBalancer is a gRPC load balancer that satisfies the
 // grpc.Balancer interface. This load balancer will open multiple connections
 // to a single address and enfoce a maximum number of concurrent requests per
@@ -191,23 +146,35 @@ func (lb *ThroughputLoadBalancer) sendNotify() {
 	lb.notify <- grpcAddrs
 }
 
+// Finds the next address that is in an up state with the lowest active
+// requests.
 func (lb *ThroughputLoadBalancer) next(wait bool) (*address, error) {
 	for {
 		var addr *address
+
+		// Set initial lowest capacity to a number that is not reachable by
+		// any addresses
 		lowestCapacity := lb.maxRequests * 2
 
 		lb.mu.Lock()
 		for _, a := range lb.addrs {
+			// If the address is in a down state or at maximum capacity,
+			// continue to the next address.
 			if a.isDown() || a.atCapacity() {
 				continue
 			}
 
+			// If the capacity is less than the lowest capacity, set addr to
+			// the address and set the current lowestCapacity to the addresses
+			// capacity.
 			if a.capacity() < lowestCapacity {
 				addr = a
 				lowestCapacity = a.capacity()
 			}
 		}
 
+		// If we found an address that is available to use, claim the address.
+		// If we successfully claim the address return it other wise continue.
 		if addr != nil {
 			err := addr.claim()
 			if err == nil {
@@ -223,4 +190,49 @@ func (lb *ThroughputLoadBalancer) next(wait bool) (*address, error) {
 
 		time.Sleep(50 * time.Millisecond)
 	}
+}
+
+type address struct {
+	grpc.Address
+
+	state          addrState
+	activeRequests int
+	maxRequests    int
+}
+
+func (a *address) claim() error {
+	if a.activeRequests >= a.maxRequests {
+		return errMaxRequestsExceeded
+	}
+
+	a.activeRequests++
+
+	return nil
+}
+
+func (a *address) release() {
+	a.activeRequests--
+}
+
+func (a *address) goUp() {
+	a.state = stateUp
+}
+
+// TODO: As per the grpc-go documentation, it is not clear how to construct
+// and take advantage of the meaningful error parameter for down. Need
+// realistic demands to guide.
+func (a *address) goDown(_ error) {
+	a.state = stateDown
+}
+
+func (a *address) isDown() bool {
+	return a.state == stateDown
+}
+
+func (a *address) capacity() int {
+	return a.activeRequests
+}
+
+func (a *address) atCapacity() bool {
+	return a.activeRequests >= a.maxRequests
 }
