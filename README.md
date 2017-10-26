@@ -1,5 +1,5 @@
-# gRPC Throughput Load Balancer
-[![GoDoc][go-doc-badge]][go-doc]
+gRPC Throughput Load Balancer [![GoDoc][go-doc-badge]][go-doc] [![travis][travis-badge]][travis] [![slack.cloudfoundry.org][slack-badge]][loggregator-slack]
+===============================================================================
 
 The gRPC throughput load balancer is a load balancer that implements the
 [`grpc.Balancer
@@ -23,5 +23,9 @@ if err != nil {
 }
 ```
 
-[go-doc-badge]: https://godoc.org/code.cloudfoundry.org/grpc-throughputlb?status.svg
-[go-doc]:       https://godoc.org/code.cloudfoundry.org/grpc-throughputlb
+[go-doc-badge]:      https://godoc.org/code.cloudfoundry.org/grpc-throughputlb?status.svg
+[go-doc]:            https://godoc.org/code.cloudfoundry.org/grpc-throughputlb
+[slack-badge]:       https://slack.cloudfoundry.org/badge.svg
+[loggregator-slack]: https://cloudfoundry.slack.com/archives/loggregator
+[travis-badge]:      https://travis-ci.org/cloudfoundry-incubator/grpc-throughputlb.svg?branch=master
+[travis]:            https://travis-ci.org/cloudfoundry-incubator/grpc-throughputlb?branch=master
