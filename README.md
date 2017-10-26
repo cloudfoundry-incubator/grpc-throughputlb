@@ -11,6 +11,14 @@ In your code when you make a gRPC request (stream or RPC), the gRPC through
 load balancer will return the connection with the least number of active
 requests.
 
+## Load Balancer Lifecycle
+
+The order gRPC calls methods on the gRPC throughput load balancer are:
+1. Start
+1. Notify
+1. Up
+1. Get
+
 ## Example
 
 ``` go
