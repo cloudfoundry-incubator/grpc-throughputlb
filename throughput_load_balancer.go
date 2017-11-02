@@ -98,7 +98,11 @@ func (lb *ThroughputLoadBalancer) Up(addr grpc.Address) func(error) {
 			a.goUp()
 			lb.mu.Unlock()
 
-			return a.goDown
+			return func(err error) {
+				lb.mu.Lock()
+				a.goDown(err)
+				lb.mu.Unlock()
+			}
 		}
 	}
 
