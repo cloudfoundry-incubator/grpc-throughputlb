@@ -7,7 +7,7 @@ interface`](https://godoc.org/google.golang.org/grpc#Balancer). It will open a
 configured number of connections to a single address and not allow more than a
 given number of concurrent requests per address.
 
-In your code when you make a gRPC request (stream or RPC), the gRPC through
+In your code when you make a gRPC request (stream or RPC), the gRPC throughput
 load balancer will return the connection with the least number of active
 requests.
 
